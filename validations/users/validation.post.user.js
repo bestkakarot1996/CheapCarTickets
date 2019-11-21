@@ -1,48 +1,52 @@
+const { validationResult, body } = require("express-validator");
 const validator = require("validator");
-const _ = require("lodash");
-const {User} = require("../../model/User");
+const { User } = require("../../model/User");
+const { ERROR } = require("../../lang/index");
 
-const validationPostUser = async (req, res, next) => {
-  let { email, password, confirm_password, fullName } = req.body;
-  let alert_errors = {};
-  /** Validate Email */
-  if (!email) {
-    alert_errors.email = "Email is required";
-  }
-  else if (!validator.isEmail(email)) {
-    alert_errors.email = "Email is invalid"
-  }
-  else {
-    let user = await User.findOne({ email });
-    console.log(user);
-    
-    if (user) {
-      alert_errors.email = "Email exists";
-    }
-  }
- 
-  /** Validate Password */
-  if (!password) {
-    alert_errors.password = "Password is required";
-  } else if (!validator.isLength(password, { min: 6 })) {
-    alert_errors.password = "Password must have at least 6 characters";
-  }
+const checkPostUser = [
+  body('email', ERROR.error_email_invalid).not().isEmpty().matches(/^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/),
+  body('password', ERROR.error_password_isLength).isLength({ min: 8 }).matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[$@$!%*?&])[A-Za-z\d$@$!%*?&]{8,}$/),
+  body('fullName', ERROR.error_fullName_limit).optional().isLength({ min: 3, max: 20 }).matches(/^[\s0-9a-zA-Z_ÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚĂĐĨŨƠàáâãèéêìíòóôõùúăđĩũơƯĂẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼỀỀỂưăạảấầẩẫậắằẳẵặẹẻẽềềểỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪễệỉịọỏốồổỗộớờởỡợụủứừỬỮỰỲỴÝỶỸửữựỳỵỷỹ ]+$/),
+  body('phone', ERROR.error_phone_invalid).optional().matches(/^(0)[0-9]{9,10}$/)
+];
+
+const validatePostUser = async (req, res, next) => {
+  const extractedErrors = [];
+  const errors = validationResult(req);
+  const { email, password, confirmPassword , fullName, phone } = req.body;
   
-  /** Validate Confirm_Password */
-  if (!confirm_password) {
-    alert_errors.confirm_password = "Confirm password is required ";
-  } else if (!validator.equals(password, confirm_password)) {
-    alert_errors.confirm_password = "Password must match";
+  const user = await User.findOne({ email });
+  // ** Validate Email /
+  if (user) {
+    extractedErrors.push({ email: ERROR.error_email_exist });
+  } else if (!email) {
+    extractedErrors.push({ email: ERROR.error_email_required });
+  } else if (errors.isEmpty()) {
+    return next()
   }
-  /** Validate Full_Name */
-  if(!fullName) { 
-    alert_errors.fullName = "Full Name is required ";
+  // * Validate Password  /
+  if (!password) {
+    extractedErrors.push({ password: ERROR.error_password_required })
+  } else if (!validator.equals(password, confirmPassword)) {
+    extractedErrors.push({confirmPassword: ERROR.error_password_must_match})
+  } 
+  // * Validate fullName  /
+  if (!fullName) {
+    extractedErrors.push({ fullName: ERROR.error_fullName_required })
   }
- 
-  if (_.isEmpty(alert_errors)) return next();
-  return res.status(400).json(alert_errors);
+  // * Validate Phone /
+  if (!phone) {
+    extractedErrors.push({ phone: ERROR.error_phone_required });
+  }
+
+
+  errors.array().map(err => extractedErrors.push({ [err.param]: err.msg }))
+  return res.status(422).json({ errors: extractedErrors });
+
+
 };
 
 module.exports = {
-  validationPostUser
+  validatePostUser,
+  checkPostUser
 }
